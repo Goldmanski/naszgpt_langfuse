@@ -1,7 +1,8 @@
+import os
 import json
 from pathlib import Path
 import streamlit as st
-from dotenv import dotenv_values, load_dotenv
+from dotenv import load_dotenv
 
 from langfuse import observe
 from langfuse.openai import OpenAI
@@ -25,10 +26,9 @@ if "model" not in st.session_state:
 USD_TO_PLN = 3.97
 PRICING = model_pricings[st.session_state["model"]]
 
-env = dotenv_values(".env")
 load_dotenv()
 
-openai_client = OpenAI(api_key=env["OPENAI_API_KEY"])
+openai_client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
 #
 # CHATBOT
@@ -111,7 +111,7 @@ def load_current_conversation():
             f.write(json.dumps({
                 "current_conversation_id": conversation_id,
             }))
-
+            
     else:
         # sprawdzamy, która konwersacja jest aktualna
         with open(DB_PATH / "current.json", "r") as f:
