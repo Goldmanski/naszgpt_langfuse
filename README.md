@@ -4,7 +4,7 @@ LLM-powered chatbot application built with Streamlit that allows users to intera
 
 ## 🚀 Live Demo
 
-[https://YOUR-CHATLAB-APP.streamlit.app/](https://YOUR-CHATLAB-APP.streamlit.app/)
+[https://chatlab-app.streamlit.app/](https://chatlab-app.streamlit.app/)
 
 The application allows users to interact with different OpenAI language models, manage conversations, customize chatbot behavior and monitor LLM interactions.
 
@@ -178,8 +178,6 @@ chatlab/
 
 Local conversation data is stored in the `db/` directory and excluded from Git.
 
-Course materials and development files are also kept locally as a backup and excluded from Git.
-
 ## ⚙️ How It Works
 
 1. The user selects an available OpenAI language model.
@@ -219,8 +217,8 @@ The result includes:
 Clone the repository:
 
 ```bash
-git clone https://github.com/Goldmanski/naszgpt_langfuse.git
-cd naszgpt_langfuse
+git clone https://github.com/Goldmanski/chatlab.git
+cd chatlab
 ```
 
 Create a virtual environment:
