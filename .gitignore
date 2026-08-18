@@ -1,4 +1,3 @@
 .env
-db
-36__instrukcja.ipynb
-36__nasz_gpt_z_langfuse.py
+/db/
+/26__nasz_gpt_v7__openai_conversations_history.*

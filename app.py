@@ -1,75 +1,93 @@
-import os
 import json
 from pathlib import Path
 import streamlit as st
-from dotenv import load_dotenv
-
-from langfuse import observe
+from langfuse.decorators import observe
 from langfuse.openai import OpenAI
-
-
-model_pricings = {
-    "gpt-4o": {
-        "input_tokens": 5.00 / 1_000_000,  # per token
-        "output_tokens": 15.00 / 1_000_000,  # per token
-    },
-    "gpt-4o-mini": {
-        "input_tokens": 0.150 / 1_000_000,  # per token
-        "output_tokens": 0.600 / 1_000_000,  # per token``
-    }
-}
-DEFAULT_MODEL_INDEX =0
-models = list(model_pricings.keys())
-if "model" not in st.session_state:
-    st.session_state["model"] = models[DEFAULT_MODEL_INDEX]
-
-USD_TO_PLN = 3.97
-PRICING = model_pricings[st.session_state["model"]]
+import os
+from dotenv import load_dotenv
 
 load_dotenv()
 
+model_pricings = {
+    "gpt-5.6": {
+        "input_tokens": 5.00 / 1_000_000,
+        "output_tokens": 30.00 / 1_000_000,
+    },
+    "gpt-5.6-terra": {
+        "input_tokens": 2.50 / 1_000_000,
+        "output_tokens": 15.00 / 1_000_000,
+    },
+    "gpt-5.6-luna": {
+        "input_tokens": 1.00 / 1_000_000,
+        "output_tokens": 6.00 / 1_000_000,
+    },
+    "gpt-5.4-mini": {
+        "input_tokens": 0.75 / 1_000_000,
+        "output_tokens": 4.50 / 1_000_000,
+    },
+    "gpt-5.4-nano": {
+        "input_tokens": 0.20 / 1_000_000,
+        "output_tokens": 1.25 / 1_000_000,
+    },
+    "gpt-4.1-mini": {
+        "input_tokens": 0.40 / 1_000_000,
+        "output_tokens": 1.60 / 1_000_000,
+    },
+}
+
+model_descriptions = {
+    "gpt-5.6": "🚀 Najmocniejszy — do złożonych zadań i najwyższej jakości odpowiedzi",
+    "gpt-5.6-terra": "⚖️ Balans jakości, szybkości i kosztu",
+    "gpt-5.6-luna": "💰 Tańszy i szybszy — do codziennych rozmów",
+    "gpt-5.4-mini": "⚡ Szybki i wydajny — dobry kompromis do prostszych zadań",
+    "gpt-5.4-nano": "💸 Bardzo tani i szybki — do prostych, powtarzalnych zadań",
+    "gpt-4.1-mini": "🧠 Lekki model — dobry do prostych rozmów przy niskim koszcie",
+}
+
+models = list(model_pricings.keys())
+
+USD_TO_PLN = 3.97
+
 openai_client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
-#
-# CHATBOT
-#
+# Chatbot
 @observe()
-def chatbot_reply(user_prompt, memory):
-    # dodaj system message
+def chatbot_reply(user_prompt, memory, model):
+    # Add system message
     messages = [
         {
             "role": "system",
             "content": st.session_state["chatbot_personality"],
         },
     ]
-    # dodaj wszystkie wiadomości z pamięci
+    # Add memory messages
     for message in memory:
         messages.append({"role": message["role"], "content": message["content"]})
-
-    # dodaj wiadomość użytkownika
+    # Add user message
     messages.append({"role": "user", "content": user_prompt})
 
-    response = openai_client.responses.create(
-        model=st.session_state["model"],
-        input=messages
+    response = openai_client.chat.completions.create(
+        model=model,
+        messages=messages
     )
     usage = {}
     if response.usage:
         usage = {
-            "input_tokens": response.usage.input_tokens,
-            "output_tokens": response.usage.output_tokens,
+            "completion_tokens": response.usage.completion_tokens,
+            "prompt_tokens": response.usage.prompt_tokens,
             "total_tokens": response.usage.total_tokens,
         }
 
     return {
         "role": "assistant",
-        "content": response.output_text,
-        "usage": usage,
+        "content": response.choices[0].message.content,
+        "usage": {
+            **usage,
+            "model": model,
+        },
     }
 
-#
-# CONVERSATION HISTORY AND DATABASE
-#
+# Conversation history and database
 DEFAULT_PERSONALITY = """
 Jesteś pomocnikiem, który odpowiada na wszystkie pytania użytkownika.
 Odpowiadaj na pytania w sposób zwięzły i zrozumiały.
@@ -77,18 +95,13 @@ Odpowiadaj na pytania w sposób zwięzły i zrozumiały.
 
 DB_PATH = Path("db")
 DB_CONVERSATIONS_PATH = DB_PATH / "conversations"
-# db/
-# ├── current.json
-# ├── conversations/
-# │   ├── 1.json
-# │   ├── 2.json
-# │   └── ...
+
 def load_conversation_to_state(conversation):
     st.session_state["id"] = conversation["id"]
     st.session_state["name"] = conversation["name"]
     st.session_state["messages"] = conversation["messages"]
     st.session_state["chatbot_personality"] = conversation["chatbot_personality"]
-
+    st.session_state["model"] = conversation.get("model", models[0])
 
 def load_current_conversation():
     if not DB_PATH.exists():
@@ -99,31 +112,31 @@ def load_current_conversation():
             "id": conversation_id,
             "name": "Konwersacja 1",
             "chatbot_personality": DEFAULT_PERSONALITY,
+            "model": models[0],
             "messages": [],
         }
 
-        # tworzymy nową konwersację
+        # Create conversation
         with open(DB_CONVERSATIONS_PATH / f"{conversation_id}.json", "w") as f:
             f.write(json.dumps(conversation))
 
-        # która od razu staje się aktualną
+        # Set current conversation
         with open(DB_PATH / "current.json", "w") as f:
             f.write(json.dumps({
                 "current_conversation_id": conversation_id,
             }))
-            
+
     else:
-        # sprawdzamy, która konwersacja jest aktualna
+        # Get current conversation
         with open(DB_PATH / "current.json", "r") as f:
             data = json.loads(f.read())
             conversation_id = data["current_conversation_id"]
 
-        # wczytujemy konwersację
+        # Load conversation
         with open(DB_CONVERSATIONS_PATH / f"{conversation_id}.json", "r") as f:
             conversation = json.loads(f.read())
 
     load_conversation_to_state(conversation)
-
 
 def save_current_conversation_messages():
     conversation_id = st.session_state["id"]
@@ -138,7 +151,6 @@ def save_current_conversation_messages():
             "messages": new_messages,
         }))
 
-
 def save_current_conversation_name():
     conversation_id = st.session_state["id"]
     new_conversation_name = st.session_state["new_conversation_name"]
@@ -151,7 +163,6 @@ def save_current_conversation_name():
             **conversation,
             "name": new_conversation_name,
         }))
-
 
 def save_current_conversation_personality():
     conversation_id = st.session_state["id"]
@@ -166,15 +177,26 @@ def save_current_conversation_personality():
             "chatbot_personality": new_chatbot_personality,
         }))
 
+def save_current_conversation_model():
+    conversation_id = st.session_state["id"]
+    new_model = st.session_state["model"]
+
+    with open(DB_CONVERSATIONS_PATH / f"{conversation_id}.json", "r") as f:
+        conversation = json.loads(f.read())
+
+    with open(DB_CONVERSATIONS_PATH / f"{conversation_id}.json", "w") as f:
+        f.write(json.dumps({
+            **conversation,
+            "model": new_model,
+        }))
 
 def create_new_conversation():
-    # poszukajmy ID dla naszej kolejnej konwersacji
+    # Find next conversation ID
     conversation_ids = []
     for p in DB_CONVERSATIONS_PATH.glob("*.json"):
         conversation_ids.append(int(p.stem))
 
-    # conversation_ids zawiera wszystkie ID konwersacji
-    # następna konwersacja będzie miała ID o 1 większe niż największe ID z listy
+    # conversation_ids contains all conversation IDs
     conversation_id = max(conversation_ids) + 1
     personality = DEFAULT_PERSONALITY
     if "chatbot_personality" in st.session_state and st.session_state["chatbot_personality"]:
@@ -184,14 +206,15 @@ def create_new_conversation():
         "id": conversation_id,
         "name": f"Konwersacja {conversation_id}",
         "chatbot_personality": personality,
+        "model": st.session_state["model"],
         "messages": [],
     }
 
-    # tworzymy nową konwersację
+    # Create conversation
     with open(DB_CONVERSATIONS_PATH / f"{conversation_id}.json", "w") as f:
         f.write(json.dumps(conversation))
 
-    # która od razu staje się aktualną
+    # Set current conversation
     with open(DB_PATH / "current.json", "w") as f:
         f.write(json.dumps({
             "current_conversation_id": conversation_id,
@@ -199,12 +222,12 @@ def create_new_conversation():
 
     load_conversation_to_state(conversation)
     st.rerun()
-
 
 def switch_conversation(conversation_id):
     with open(DB_CONVERSATIONS_PATH / f"{conversation_id}.json", "r") as f:
         conversation = json.loads(f.read())
 
+    # Set current conversation
     with open(DB_PATH / "current.json", "w") as f:
         f.write(json.dumps({
             "current_conversation_id": conversation_id,
@@ -212,7 +235,6 @@ def switch_conversation(conversation_id):
 
     load_conversation_to_state(conversation)
     st.rerun()
-
 
 def list_conversations():
     conversations = []
@@ -226,13 +248,21 @@ def list_conversations():
 
     return conversations
 
-
-#
-# MAIN PROGRAM
-#
+# Main program
 load_current_conversation()
 
-st.title(":classical_building: NaszGPT")
+st.title("🧪 ChatLab 🧪")
+
+selected_model = st.selectbox(
+    "Model",
+    models,
+    index=models.index(st.session_state["model"]),
+    format_func=lambda model: f"{model} — {model_descriptions[model]}",
+)
+
+if selected_model != st.session_state["model"]:
+    st.session_state["model"] = selected_model
+    save_current_conversation_model()
 
 for message in st.session_state["messages"]:
     with st.chat_message(message["role"]):
@@ -246,7 +276,11 @@ if prompt:
     st.session_state["messages"].append({"role": "user", "content": prompt})
 
     with st.chat_message("assistant"):
-        response = chatbot_reply(prompt, memory=st.session_state["messages"][-10:])
+        response = chatbot_reply(
+            prompt,
+            memory=st.session_state["messages"][-10:-1],
+            model=selected_model,
+        )
         st.markdown(response["content"])
 
     st.session_state["messages"].append({"role": "assistant", "content": response["content"], "usage": response["usage"]})
@@ -255,15 +289,13 @@ if prompt:
 with st.sidebar:
     st.subheader("Aktualna konwersacja")
     total_cost = 0
-
-    selected_model = st.selectbox("Wybierany model", models, index=DEFAULT_MODEL_INDEX)       
-    st.session_state["model"] = selected_model
-    PRICING = model_pricings[st.session_state["model"]]
-
     for message in st.session_state.get("messages") or []:
         if "usage" in message:
-            total_cost += message["usage"]["input_tokens"] * PRICING["input_tokens"]
-            total_cost += message["usage"]["output_tokens"] * PRICING["output_tokens"]
+            usage = message["usage"]
+            pricing = model_pricings.get(usage.get("model"), model_pricings[selected_model])
+
+            total_cost += usage["prompt_tokens"] * pricing["input_tokens"]
+            total_cost += usage["completion_tokens"] * pricing["output_tokens"]
 
     c0, c1 = st.columns(2)
     with c0:
@@ -279,7 +311,7 @@ with st.sidebar:
         on_change=save_current_conversation_name,
     )
     st.session_state["chatbot_personality"] = st.text_area(
-        "Osobowość chatbota",
+        "Osobowość chatbota",
         max_chars=1000,
         height=200,
         value=st.session_state["chatbot_personality"],
@@ -291,7 +323,6 @@ with st.sidebar:
     if st.button("Nowa konwersacja"):
         create_new_conversation()
 
-    # pokazujemy tylko top 5 konwersacji
     conversations = list_conversations()
     sorted_conversations = sorted(conversations, key=lambda x: x["id"], reverse=True)
     for conversation in sorted_conversations[:5]:
