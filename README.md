@@ -6,7 +6,7 @@ LLM-powered chatbot application built with Streamlit that allows users to intera
 
 [https://chatlab-app.streamlit.app/](https://chatlab-app.streamlit.app/)
 
-The application allows users to interact with different OpenAI language models, manage conversations, customize chatbot behavior and monitor LLM interactions.
+Users can select different OpenAI models, manage separate conversations, customize the chatbot's personality, and track token usage and conversation costs.
 
 ## 📸 Screenshots
 
